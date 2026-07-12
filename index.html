@@ -4,30 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Загрузка сервера</title>
-
-<!--
-=====================================================================
-  ЗАГРУЗОЧНЫЙ ЭКРАН ДЛЯ GMOD (DarkRP)
-=====================================================================
-  КАК ПОДКЛЮЧИТЬ:
-  1. Залей эту папку на GitHub Pages (settings -> Pages -> ветка main).
-     Получишь ссылку вида https://твойник.github.io/repo/
-  2. В server.cfg (или через консоль сервера) пропиши:
-       sv_loadingurl "https://твойник.github.io/repo/?SteamId=%s&Map=%m"
-  3. Замени картинку фона и логотип (см. блок CONFIG в JS ниже),
-     либо просто положи рядом файлы bg.jpg и logo.png с такими именами —
-     страница подхватит их автоматически.
-
-  Игра сама вызывает функции GameDetails / SetStatusChanged /
-  SetFilesTotal / SetFilesNeeded / DownloadingFile — они уже подключены.
-  Если открыть файл просто в браузере (не через GMod), включится
-  демо-режим — он показывает, как всё будет выглядеть "в бою".
-=====================================================================
--->
-
 <style>
   :root{
-    /* ---------- палитра: индиго + фиолетово-янтарный акцент (посветлее) ---------- */
     --bg-0:#14131f;
     --bg-1:#211f36;
     --glass-fill: rgba(48, 46, 74, 0.46);
@@ -52,7 +30,6 @@
     color:var(--text-hi);
   }
 
-  /* ================= ФОН ================= */
   .bg-layer{
     position:fixed; inset:0; z-index:0;
     background: radial-gradient(circle at 20% 15%, #201a3a 0%, transparent 45%),
@@ -67,7 +44,6 @@
   }
   .bg-image.loaded{ opacity:1; }
 
-  /* лёгкое затемнение поверх картинки — только чтобы текст читался, без "траура" */
   .bg-scrim{
     position:fixed; inset:0; z-index:1;
     background:
@@ -76,11 +52,7 @@
     pointer-events:none;
   }
 
-  /* Единый "glow"-слой вместо трёх отдельных blur-элементов.
-     Почему так: filter:blur — одна из самых дорогих операций для рендера,
-     а во время реальной загрузки в GMod встроенный браузер (CEF) и так
-     недополучает кадры от движка. Один слой с несколькими градиентами
-     и одним blur — заметно дешевле, чем три больших блюрных диска. */
+
   .bg-glow{
     position:fixed; inset:-15%; z-index:2; pointer-events:none;
     background:
@@ -100,13 +72,11 @@
     100%{ background-position: 5% 25%,  95% 70%, 58% 5%; }
   }
 
-  /* тонкий шум поверх всего — убирает "пластиковое" ощущение */
   .grain{
     position:fixed; inset:0; z-index:3; pointer-events:none; opacity:0.05; mix-blend-mode:overlay;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
-  /* ================= ЦЕНТРАЛЬНОЕ ОКНО ================= */
   .shell{
     position:relative; z-index:4;
     width:100%; height:100%;
@@ -132,7 +102,6 @@
     to{ opacity:1; transform:translateY(0) scale(1); }
   }
 
-  /* ---------- шапка: логотип + название сервера ---------- */
   .brand{ display:flex; align-items:center; gap:14px; margin-bottom:22px; }
   .logo-wrap{
     width:52px; height:52px; border-radius:14px; flex:none;
@@ -161,7 +130,6 @@
   }
   @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
 
-  /* ---------- статус-строка ---------- */
   .status-row{
     display:flex; align-items:baseline; justify-content:space-between;
     margin-bottom:10px;
@@ -174,7 +142,6 @@
     font-family:var(--mono); font-size:13px; color:var(--accent-b); font-weight:600;
   }
 
-  /* ---------- прогресс-бар (сигнатурный элемент) ---------- */
   .progress-track{
     position:relative; height:8px; border-radius:999px; overflow:hidden;
     background:rgba(255,255,255,0.08);
@@ -188,7 +155,6 @@
     box-shadow:0 0 16px var(--accent-a-soft);
     transition: width .45s cubic-bezier(.3,.7,.2,1);
   }
-  /* бегущий блик по прогресс-бару — "сканирующий" эффект */
   .progress-fill::after{
     content:""; position:absolute; inset:0;
     background:linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent);
@@ -199,7 +165,6 @@
     100%{ transform:translateX(280%); }
   }
 
-  /* ---------- консоль логов ---------- */
   .console{
     border-radius:14px;
     background:rgba(0,0,0,0.35);
@@ -249,7 +214,6 @@
   }
   @keyframes blink{ 50%{ opacity:0; } }
 
-  /* ---------- подвал: карта + подсказка ---------- */
   .footer{
     margin-top:18px; padding-top:14px;
     border-top:1px solid rgba(255,255,255,0.08);
@@ -322,13 +286,13 @@
 (function(){
 
   /* =====================================================================
-     CONFIG — здесь можно всё настроить под свой сервер
+                                  CONFIG 
   ===================================================================== */
   const CONFIG = {
-    SERVER_NAME_FALLBACK: "Мой DarkRP сервер",   // если GameDetails ещё не пришёл
-    LOGO_URL: "logo.png",                          // положи файл рядом со страницей
-    BG_URL:   "bg.jpg",                            // положи файл рядом со страницей
-    LOGO_LETTERS: "RP",                            // буквы-заглушка, если лого не найдено
+    SERVER_NAME_FALLBACK: "NovaRP",   // если GameDetails ещё не пришёл
+    LOGO_URL: "logo.png",
+    BG_URL:   "bg.jpg",
+    LOGO_LETTERS: "NovaRP",
     MAX_LOG_LINES: 9,
     FLAVOR_LINES: [
       'Проектируем игровой мир…',
@@ -351,9 +315,6 @@
     ]
   };
 
-  /* =====================================================================
-     Вспомогательные функции интерфейса
-  ===================================================================== */
   const $ = (id) => document.getElementById(id);
   const consoleBody   = $('console-body');
   const statusText    = $('status-text');
@@ -384,13 +345,6 @@
     }
   }
 
-  /* ---- отдельная "живая" строка для скачивания контента ----
-     ВАЖНО: игра может вызывать DownloadingFile / SetStatusChanged
-     ОТДЕЛЬНО ДЛЯ КАЖДОГО аддона мастерской (их бывают сотни) — именно
-     это раньше "рвало" лог и подвешивало анимации фона, так как на
-     каждый вызов мы трогали DOM. Теперь строка создаётся ОДИН РАЗ,
-     дальше просто анимируется точками через CSS (без единой перерисовки).
-  */
   let downloadLineShown = false;
   let flavorTimer = null;
   let flavorQueue = [];
@@ -407,8 +361,6 @@
     downloadLineShown = true;
     addLog('Скачивание контента из мастерской<span class="dot-anim"><span>.</span><span>.</span><span>.</span></span>', 'live');
 
-    // раз в ~2 сек добавляем атмосферную фразу — это просто "жизнь" в логе,
-    // не завязанная на реальные (и очень частые) вызовы движка
     flavorTimer = setInterval(() => addLog(nextFlavorLine()), 1700);
   }
   function finishDownloadingLine(){
@@ -448,9 +400,8 @@
   }
   tipText.style.transition = 'opacity .3s ease';
 
-  /* фон и логотип — подхватываем файлы, если они есть, иначе остаётся градиент/буквы */
   bgImage.onload = () => bgImage.classList.add('loaded');
-  bgImage.onerror = () => { /* оставляем градиентный фон */ };
+  bgImage.onerror = () => {};
   bgImage.src = CONFIG.BG_URL;
 
   logoImg.onload = () => { logoImg.classList.add('loaded'); logoFallback.style.display = 'none'; };
@@ -463,17 +414,12 @@
   addLog('Загрузочный экран инициализирован', 'ok');
   rotateTips();
 
-  /* =====================================================================
-     JAVASCRIPT-ФУНКЦИИ, КОТОРЫЕ ВЫЗЫВАЕТ САМА ИГРА (GMod Engine API)
-     https://wiki.facepunch.com/gmod/Loading_URL
-  ===================================================================== */
 
   let filesTotal = 0;
   let filesNeeded = 0;
   let gmodConnected = false;
-  let lastMilestone = -1; // последняя веха прогресса, о которой уже написали в лог (0,20,40...)
+  let lastMilestone = -1; 
 
-  // Вызывается один раз в самом начале
   window.GameDetails = function(servername, serverurl, mapname, maxplayers, steamid, gamemode, volume, language){
     gmodConnected = true;
     serverName.textContent = servername || CONFIG.SERVER_NAME_FALLBACK;
@@ -482,7 +428,6 @@
     addLog('Данные сервера получены: <b>' + servername + '</b>', 'ok');
   };
 
-  // Вызывается один раз, сообщает сколько всего файлов скачать
   window.SetFilesTotal = function(total){
     filesTotal = total || 0;
     filesNeeded = filesTotal;
@@ -492,32 +437,24 @@
     }
   };
 
-  // Вызывается на каждый файл/аддон мастерской, который клиент качает —
-  // а их могут быть сотни. Поэтому мы не трогаем DOM на каждый вызов,
-  // а просто один раз показываем строку "Скачивание контента из мастерской".
   window.DownloadingFile = function(fileName){
     showDownloadingLine();
   };
 
-  // Вызывается при смене статуса подключения (Lua запускается, и т.д.)
   let lastStatusCall = 0;
   window.SetStatusChanged = function(status){
     const now = Date.now();
-    if (now - lastStatusCall < 100) return; // защита от лавины вызовов (сотни аддонов подряд)
+    if (now - lastStatusCall < 100) return; 
     lastStatusCall = now;
 
     setStatus(status);
-    showDownloadingLine(); // на случай, если контент грузится через статус, а не DownloadingFile
+    showDownloadingLine();
 
-    // если движок ещё не прислал список файлов, просто плавно тянем прогресс к 95%
     if (filesTotal === 0){
       setPercent(Math.min(95, currentPercent + 4));
     }
   };
 
-  // Вызывается при изменении числа оставшихся файлов.
-  // Сам процент и так виден на прогресс-баре сверху — в лог пишем
-  // только момент завершения, чтобы консоль оставалась короткой и чистой.
   window.SetFilesNeeded = function(needed){
     filesNeeded = needed || 0;
     if (filesTotal > 0){
@@ -534,12 +471,7 @@
     }
   };
 
-  /* =====================================================================
-     ДЕМО-РЕЖИМ ДЛЯ ПРЕДПРОСМОТРА В ОБЫЧНОМ БРАУЗЕРЕ
-     Если через 700мс игра так и не вызвала GameDetails — считаем,
-     что страницу открыли просто в браузере, и прогоняем красивую
-     имитацию подключения, чтобы можно было оценить дизайн.
-  ===================================================================== */
+
   setTimeout(() => {
     if (gmodConnected) return;
 
