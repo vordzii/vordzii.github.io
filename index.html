@@ -76,26 +76,28 @@
     pointer-events:none;
   }
 
-  /* плавающие цветовые пятна для ощущения "живого" фона.
-     z-index выше scrim + blend-mode screen — благодаря этому они
-     не тонут в затемнении и явно видно, как они двигаются. */
-  .blob{
-    position:fixed; z-index:2; border-radius:50%;
-    filter:blur(60px); opacity:0.55; pointer-events:none;
+  /* Единый "glow"-слой вместо трёх отдельных blur-элементов.
+     Почему так: filter:blur — одна из самых дорогих операций для рендера,
+     а во время реальной загрузки в GMod встроенный браузер (CEF) и так
+     недополучает кадры от движка. Один слой с несколькими градиентами
+     и одним blur — заметно дешевле, чем три больших блюрных диска. */
+  .bg-glow{
+    position:fixed; inset:-15%; z-index:2; pointer-events:none;
+    background:
+      radial-gradient(circle at 20% 25%, rgba(139,107,255,0.6), transparent 32%),
+      radial-gradient(circle at 82% 78%, rgba(255,180,84,0.55), transparent 32%),
+      radial-gradient(circle at 65% 25%, rgba(89,167,255,0.4), transparent 28%);
+    background-repeat:no-repeat;
+    background-size:160% 160%;
     mix-blend-mode:screen;
-    animation: drift 9s ease-in-out infinite;
-    will-change: transform;
-    backface-visibility:hidden;
-    transform:translateZ(0);
+    filter:blur(38px);
+    will-change: background-position;
+    animation: glowMove 5.5s ease-in-out infinite alternate;
   }
-  .blob-a{ width:42vw; height:42vw; background:var(--accent-a); top:-10%; left:-8%; }
-  .blob-b{ width:34vw; height:34vw; background:var(--accent-b); bottom:-12%; right:-10%; animation-delay:-3s; animation-duration:11s; }
-  .blob-c{ width:26vw; height:26vw; background:#59a7ff; top:35%; left:60%; animation-delay:-6s; animation-duration:13s; opacity:0.4; }
-  @keyframes drift{
-    0%{ transform:translate3d(0,0,0) scale(1); }
-    33%{ transform:translate3d(10%, 8%, 0) scale(1.2); }
-    66%{ transform:translate3d(-8%, 6%, 0) scale(0.9); }
-    100%{ transform:translate3d(0,0,0) scale(1); }
+  @keyframes glowMove{
+    0%{   background-position: 0% 15%, 100% 85%, 65% 10%; }
+    50%{  background-position: 25% 0%,  75% 100%, 40% 40%; }
+    100%{ background-position: 5% 25%,  95% 70%, 58% 5%; }
   }
 
   /* тонкий шум поверх всего — убирает "пластиковое" ощущение */
@@ -117,8 +119,8 @@
     border-radius:24px;
     background:var(--glass-fill);
     border:1px solid var(--glass-border);
-    backdrop-filter: blur(28px) saturate(160%);
-    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    backdrop-filter: blur(20px) saturate(135%);
+    -webkit-backdrop-filter: blur(20px) saturate(135%);
     box-shadow:
       0 30px 80px rgba(0,0,0,0.55),
       inset 0 1px 0 rgba(255,255,255,0.18),
@@ -203,7 +205,7 @@
     background:rgba(0,0,0,0.35);
     border:1px solid rgba(255,255,255,0.08);
     padding:12px 14px;
-    height:168px;
+    height:236px;
     display:flex; flex-direction:column;
   }
   .console-title{
@@ -264,7 +266,7 @@
 
   @media (max-width:480px){
     .panel{ padding:24px 20px 20px; border-radius:18px; }
-    .console{ height:140px; }
+    .console{ height:190px; }
   }
 
   @media (prefers-reduced-motion: reduce){
@@ -277,9 +279,7 @@
   <div class="bg-layer"></div>
   <img class="bg-image" id="bg-image" alt="">
   <div class="bg-scrim"></div>
-  <div class="blob blob-a"></div>
-  <div class="blob blob-b"></div>
-  <div class="blob blob-c"></div>
+  <div class="bg-glow"></div>
   <div class="grain"></div>
 
   <div class="shell">
@@ -329,7 +329,19 @@
     LOGO_URL: "logo.png",                          // положи файл рядом со страницей
     BG_URL:   "bg.jpg",                            // положи файл рядом со страницей
     LOGO_LETTERS: "RP",                            // буквы-заглушка, если лого не найдено
-    MAX_LOG_LINES: 6,
+    MAX_LOG_LINES: 9,
+    FLAVOR_LINES: [
+      'Проектируем игровой мир…',
+      'Расставляем NPC по районам…',
+      'Настраиваем баланс экономики…',
+      'Готовим списки лицензий и работ…',
+      'Синхронизируем базу данных игроков…',
+      'Прогреваем кэш моделей и текстур…',
+      'Настраиваем систему организаций…',
+      'Подгружаем звуки города…',
+      'Раскладываем инвентарь по магазинам…',
+      'Проверяем зоны спавна…'
+    ],
     TIPS: [
       'Совет: используй <b>/report</b>, если увидел нарушителя правил.',
       'Совет: команда <b>/help</b> открывает список базовых команд.',
@@ -380,13 +392,28 @@
      дальше просто анимируется точками через CSS (без единой перерисовки).
   */
   let downloadLineShown = false;
+  let flavorTimer = null;
+  let flavorQueue = [];
+
+  function nextFlavorLine(){
+    if (flavorQueue.length === 0){
+      flavorQueue = CONFIG.FLAVOR_LINES.slice().sort(() => Math.random() - 0.5);
+    }
+    return flavorQueue.shift();
+  }
+
   function showDownloadingLine(){
     if (downloadLineShown) return;
     downloadLineShown = true;
     addLog('Скачивание контента из мастерской<span class="dot-anim"><span>.</span><span>.</span><span>.</span></span>', 'live');
+
+    // раз в ~2 сек добавляем атмосферную фразу — это просто "жизнь" в логе,
+    // не завязанная на реальные (и очень частые) вызовы движка
+    flavorTimer = setInterval(() => addLog(nextFlavorLine()), 1700);
   }
   function finishDownloadingLine(){
     downloadLineShown = false;
+    if (flavorTimer){ clearInterval(flavorTimer); flavorTimer = null; }
   }
 
   let statusFadeTimer = null;
