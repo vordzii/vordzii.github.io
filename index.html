@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Загрузка сервера</title>
+
 <style>
   :root{
     --bg-0:#14131f;
@@ -13,8 +14,8 @@
     --glass-border-hi: rgba(255,255,255,0.35);
     --text-hi:#f7f6ff;
     --text-lo:#b6b3d4;
-    --accent-a:#8b6bff;   /* фиолетовый */
-    --accent-b:#ffb454;   /* янтарный */
+    --accent-a:#8b6bff;
+    --accent-b:#ffb454;
     --accent-a-soft: rgba(139,107,255,0.35);
     --ok:#59e59a;
     --mono: "IBM Plex Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -52,28 +53,34 @@
     pointer-events:none;
   }
 
-
-  .bg-glow{
-    position:fixed; inset:-15%; z-index:2; pointer-events:none;
-    background:
-      radial-gradient(circle at 20% 25%, rgba(139,107,255,0.6), transparent 32%),
-      radial-gradient(circle at 82% 78%, rgba(255,180,84,0.55), transparent 32%),
-      radial-gradient(circle at 65% 25%, rgba(89,167,255,0.4), transparent 28%);
-    background-repeat:no-repeat;
-    background-size:160% 160%;
-    mix-blend-mode:screen;
-    filter:blur(38px);
-    will-change: background-position;
-    animation: glowMove 5.5s ease-in-out infinite alternate;
+  .blob{
+    position:fixed; z-index:2; border-radius:50%; pointer-events:none;
+    animation: drift 6s ease-in-out infinite;
+    transform:translate3d(0,0,0);
   }
-  @keyframes glowMove{
-    0%{   background-position: 0% 15%, 100% 85%, 65% 10%; }
-    50%{  background-position: 25% 0%,  75% 100%, 40% 40%; }
-    100%{ background-position: 5% 25%,  95% 70%, 58% 5%; }
+  .blob-a{
+    width:48vw; height:48vw; top:-14%; left:-10%;
+    background: radial-gradient(circle, rgba(139,107,255,0.65) 0%, rgba(139,107,255,0) 68%);
+  }
+  .blob-b{
+    width:40vw; height:40vw; bottom:-16%; right:-12%;
+    background: radial-gradient(circle, rgba(255,180,84,0.6) 0%, rgba(255,180,84,0) 68%);
+    animation-delay:-2s; animation-duration:7.5s;
+  }
+  .blob-c{
+    width:32vw; height:32vw; top:30%; left:58%;
+    background: radial-gradient(circle, rgba(89,167,255,0.5) 0%, rgba(89,167,255,0) 65%);
+    animation-delay:-4s; animation-duration:8.5s;
+  }
+  @keyframes drift{
+    0%{   transform:translate3d(0,0,0) scale(1); }
+    33%{  transform:translate3d(6%, 5%, 0) scale(1.15); }
+    66%{  transform:translate3d(-5%, 4%, 0) scale(0.92); }
+    100%{ transform:translate3d(0,0,0) scale(1); }
   }
 
   .grain{
-    position:fixed; inset:0; z-index:3; pointer-events:none; opacity:0.05; mix-blend-mode:overlay;
+    position:fixed; inset:0; z-index:3; pointer-events:none; opacity:0.05;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
@@ -136,7 +143,7 @@
   }
   #status-text{
     font-size:14px; color:var(--text-hi); font-weight:500;
-    transition:opacity .25s ease;
+    transition:opacity .3s ease;
   }
   #percent-text{
     font-family:var(--mono); font-size:13px; color:var(--accent-b); font-weight:600;
@@ -243,7 +250,9 @@
   <div class="bg-layer"></div>
   <img class="bg-image" id="bg-image" alt="">
   <div class="bg-scrim"></div>
-  <div class="bg-glow"></div>
+  <div class="blob blob-a"></div>
+  <div class="blob blob-b"></div>
+  <div class="blob blob-c"></div>
   <div class="grain"></div>
 
   <div class="shell">
@@ -285,14 +294,11 @@
 <script>
 (function(){
 
-  /* =====================================================================
-                                  CONFIG 
-  ===================================================================== */
   const CONFIG = {
-    SERVER_NAME_FALLBACK: "NovaRP",   // если GameDetails ещё не пришёл
+    SERVER_NAME_FALLBACK: "Мой DarkRP сервер",
     LOGO_URL: "logo.png",
     BG_URL:   "bg.jpg",
-    LOGO_LETTERS: "NovaRP",
+    LOGO_LETTERS: "RP",
     MAX_LOG_LINES: 9,
     FLAVOR_LINES: [
       'Проектируем игровой мир…',
@@ -360,7 +366,6 @@
     if (downloadLineShown) return;
     downloadLineShown = true;
     addLog('Скачивание контента из мастерской<span class="dot-anim"><span>.</span><span>.</span><span>.</span></span>', 'live');
-
     flavorTimer = setInterval(() => addLog(nextFlavorLine()), 1700);
   }
   function finishDownloadingLine(){
@@ -369,14 +374,17 @@
   }
 
   let statusFadeTimer = null;
+  let displayedStatus = '';
   function setStatus(text){
+    if (text === displayedStatus) return;
+    displayedStatus = text;
     if (statusFadeTimer) clearTimeout(statusFadeTimer);
     statusText.style.opacity = 0;
     statusFadeTimer = setTimeout(() => {
       statusText.textContent = text;
       statusText.style.opacity = 1;
       statusFadeTimer = null;
-    }, 120);
+    }, 260);
   }
 
   function setPercent(p){
@@ -414,11 +422,33 @@
   addLog('Загрузочный экран инициализирован', 'ok');
   rotateTips();
 
-
   let filesTotal = 0;
   let filesNeeded = 0;
   let gmodConnected = false;
-  let lastMilestone = -1; 
+  let lastMilestone = -1;
+  let lastStatusUpdate = 0;
+  let pendingStatus = null;
+  let statusPumpTimer = null;
+
+  function queueStatus(text){
+    pendingStatus = text;
+    const now = Date.now();
+    if (now - lastStatusUpdate >= 1000){
+      lastStatusUpdate = now;
+      setStatus(pendingStatus);
+      pendingStatus = null;
+    } else if (!statusPumpTimer){
+      const wait = 1000 - (now - lastStatusUpdate);
+      statusPumpTimer = setTimeout(() => {
+        statusPumpTimer = null;
+        lastStatusUpdate = Date.now();
+        if (pendingStatus !== null){
+          setStatus(pendingStatus);
+          pendingStatus = null;
+        }
+      }, wait);
+    }
+  }
 
   window.GameDetails = function(servername, serverurl, mapname, maxplayers, steamid, gamemode, volume, language){
     gmodConnected = true;
@@ -433,7 +463,7 @@
     filesNeeded = filesTotal;
     filesCounter.textContent = filesTotal ? ('0 / ' + filesTotal) : '';
     if (filesTotal > 0){
-      setStatus('Требуется скачать файлов: ' + filesTotal);
+      queueStatus('Требуется скачать файлов: ' + filesTotal);
     }
   };
 
@@ -441,15 +471,9 @@
     showDownloadingLine();
   };
 
-  let lastStatusCall = 0;
   window.SetStatusChanged = function(status){
-    const now = Date.now();
-    if (now - lastStatusCall < 100) return; 
-    lastStatusCall = now;
-
-    setStatus(status);
+    queueStatus(status);
     showDownloadingLine();
-
     if (filesTotal === 0){
       setPercent(Math.min(95, currentPercent + 4));
     }
@@ -471,7 +495,6 @@
     }
   };
 
-
   setTimeout(() => {
     if (gmodConnected) return;
 
@@ -486,16 +509,16 @@
 
     window.GameDetails('DarkRP City RP | x2 EXP', '', 'rp_downtown_v4c_v2', 64, 0, 'darkrp', 1, 'ru');
 
-    setTimeout(() => setStatus('Проверка файлов сервера…'), 500);
+    setTimeout(() => queueStatus('Проверка файлов сервера…'), 500);
     setTimeout(() => window.SetFilesTotal(demoFiles.length), 1000);
 
     let i = 0;
     const iv = setInterval(() => {
       if (i >= demoFiles.length){
         clearInterval(iv);
-        setTimeout(() => setStatus('Запуск Lua…'), 300);
-        setTimeout(() => setStatus('Подключение к серверу…'), 1300);
-        setTimeout(() => { setPercent(100); setStatus('Добро пожаловать!'); }, 2300);
+        setTimeout(() => queueStatus('Запуск Lua…'), 300);
+        setTimeout(() => queueStatus('Подключение к серверу…'), 1300);
+        setTimeout(() => { setPercent(100); queueStatus('Добро пожаловать!'); }, 2300);
         return;
       }
       window.DownloadingFile(demoFiles[i]);
