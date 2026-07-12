@@ -27,14 +27,14 @@
 
 <style>
   :root{
-    /* ---------- палитра: тёмный индиго + фиолетово-янтарный акцент ---------- */
-    --bg-0:#07070c;
-    --bg-1:#0d0e18;
-    --glass-fill: rgba(18, 18, 28, 0.42);
-    --glass-border: rgba(255,255,255,0.14);
-    --glass-border-hi: rgba(255,255,255,0.28);
-    --text-hi:#f3f2ff;
-    --text-lo:#9a97b8;
+    /* ---------- палитра: индиго + фиолетово-янтарный акцент (посветлее) ---------- */
+    --bg-0:#14131f;
+    --bg-1:#211f36;
+    --glass-fill: rgba(48, 46, 74, 0.46);
+    --glass-border: rgba(255,255,255,0.22);
+    --glass-border-hi: rgba(255,255,255,0.35);
+    --text-hi:#f7f6ff;
+    --text-lo:#b6b3d4;
     --accent-a:#8b6bff;   /* фиолетовый */
     --accent-b:#ffb454;   /* янтарный */
     --accent-a-soft: rgba(139,107,255,0.35);
@@ -67,37 +67,44 @@
   }
   .bg-image.loaded{ opacity:1; }
 
-  /* лёгкое затемнение поверх картинки, чтобы стеклянная панель читалась */
+  /* лёгкое затемнение поверх картинки — только чтобы текст читался, без "траура" */
   .bg-scrim{
     position:fixed; inset:0; z-index:1;
     background:
-      radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 78%),
-      linear-gradient(180deg, rgba(0,0,0,0.35), rgba(0,0,0,0.15) 30%, rgba(0,0,0,0.55));
+      radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 0%, rgba(0,0,0,0.32) 82%),
+      linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.05) 30%, rgba(0,0,0,0.3));
     pointer-events:none;
   }
 
-  /* плавающие цветовые пятна для ощущения "живого" фона */
+  /* плавающие цветовые пятна для ощущения "живого" фона.
+     z-index выше scrim + blend-mode screen — благодаря этому они
+     не тонут в затемнении и явно видно, как они двигаются. */
   .blob{
-    position:fixed; z-index:1; border-radius:50%;
-    filter:blur(70px); opacity:0.35; pointer-events:none;
-    animation: drift 18s ease-in-out infinite;
+    position:fixed; z-index:2; border-radius:50%;
+    filter:blur(60px); opacity:0.55; pointer-events:none;
+    mix-blend-mode:screen;
+    animation: drift 10s ease-in-out infinite;
+    will-change: transform;
   }
-  .blob-a{ width:38vw; height:38vw; background:var(--accent-a); top:-8%; left:-6%; }
-  .blob-b{ width:30vw; height:30vw; background:var(--accent-b); bottom:-10%; right:-8%; animation-delay:-6s; }
+  .blob-a{ width:42vw; height:42vw; background:var(--accent-a); top:-10%; left:-8%; }
+  .blob-b{ width:34vw; height:34vw; background:var(--accent-b); bottom:-12%; right:-10%; animation-delay:-4s; animation-duration:13s; }
+  .blob-c{ width:26vw; height:26vw; background:#59a7ff; top:35%; left:60%; animation-delay:-7s; animation-duration:16s; opacity:0.4; }
   @keyframes drift{
-    0%,100%{ transform:translate(0,0) scale(1); }
-    50%{ transform:translate(4%, 3%) scale(1.08); }
+    0%{ transform:translate(0,0) scale(1); }
+    33%{ transform:translate(8%, 6%) scale(1.15); }
+    66%{ transform:translate(-6%, 4%) scale(0.95); }
+    100%{ transform:translate(0,0) scale(1); }
   }
 
   /* тонкий шум поверх всего — убирает "пластиковое" ощущение */
   .grain{
-    position:fixed; inset:0; z-index:2; pointer-events:none; opacity:0.05; mix-blend-mode:overlay;
+    position:fixed; inset:0; z-index:3; pointer-events:none; opacity:0.05; mix-blend-mode:overlay;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
   /* ================= ЦЕНТРАЛЬНОЕ ОКНО ================= */
   .shell{
-    position:relative; z-index:3;
+    position:relative; z-index:4;
     width:100%; height:100%;
     display:flex; align-items:center; justify-content:center;
   }
@@ -219,6 +226,11 @@
   .log-line.ok .tag{ color:var(--ok); }
   @keyframes appear{ from{opacity:0; transform:translateY(3px);} to{opacity:1; transform:translateY(0);} }
 
+  .log-line.current{
+    color:var(--text-hi);
+  }
+  .log-line.current .tag{ color:var(--accent-a); }
+
   .cursor{
     display:inline-block; width:7px; height:13px; background:var(--accent-a);
     margin-left:2px; vertical-align:-2px;
@@ -258,6 +270,7 @@
   <div class="bg-scrim"></div>
   <div class="blob blob-a"></div>
   <div class="blob blob-b"></div>
+  <div class="blob blob-c"></div>
   <div class="grain"></div>
 
   <div class="shell">
@@ -336,16 +349,43 @@
 
   let currentPercent = 0;
 
+  function timeNow(){
+    return new Date().toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  }
+
   function addLog(text, kind){
     const line = document.createElement('div');
     line.className = 'log-line' + (kind === 'ok' ? ' ok' : '');
-    const time = new Date().toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
-    line.innerHTML = '<span class="tag">[' + time + ']</span>' + text;
+    line.innerHTML = '<span class="tag">[' + timeNow() + ']</span>' + text;
     consoleBody.appendChild(line);
     while (consoleBody.children.length > CONFIG.MAX_LOG_LINES){
       consoleBody.removeChild(consoleBody.firstChild);
     }
     consoleBody.scrollTop = consoleBody.scrollHeight;
+  }
+
+  /* ---- отдельная "живая" строка для текущего скачиваемого файла ----
+     Вместо того чтобы печатать новую строку на КАЖДЫЙ файл (из-за чего
+     лог "летел" и ничего нельзя было прочитать), мы держим одну строку
+     и просто обновляем её текст. Обновление ещё и троттлится по времени,
+     чтобы не дёргалось на пачках мелких файлов. */
+  let currentLineEl = null;
+  let lastFileUpdate = 0;
+  function updateCurrentFile(fileName){
+    const now = Date.now();
+    if (now - lastFileUpdate < 90) return; // троттлинг
+    lastFileUpdate = now;
+
+    if (!currentLineEl){
+      currentLineEl = document.createElement('div');
+      currentLineEl.className = 'log-line current';
+      consoleBody.appendChild(currentLineEl);
+    }
+    currentLineEl.innerHTML = '<span class="tag">[' + timeNow() + ']</span>Скачивание контента<span class="cursor"></span>';
+    consoleBody.scrollTop = consoleBody.scrollHeight;
+  }
+  function finishCurrentFile(){
+    currentLineEl = null; // следующий блок скачивания начнёт новую строку
   }
 
   function setStatus(text){
@@ -398,6 +438,7 @@
   let filesTotal = 0;
   let filesNeeded = 0;
   let gmodConnected = false;
+  let lastMilestone = -1; // последняя веха прогресса, о которой уже написали в лог (0,20,40...)
 
   // Вызывается один раз в самом начале
   window.GameDetails = function(servername, serverurl, mapname, maxplayers, steamid, gamemode, volume, language){
@@ -418,9 +459,11 @@
     }
   };
 
-  // Вызывается на каждый файл, который клиент начинает скачивать
+  // Вызывается на каждый файл, который клиент начинает скачивать.
+  // Файлов может быть сотни — поэтому мы НЕ пишем построчно каждый,
+  // а просто обновляем одну "живую" строку "Скачивание контента…".
   window.DownloadingFile = function(fileName){
-    addLog('Скачивание: ' + fileName);
+    updateCurrentFile(fileName);
   };
 
   // Вызывается при смене статуса подключения (Lua запускается, и т.д.)
@@ -432,17 +475,26 @@
     }
   };
 
-  // Вызывается при изменении числа оставшихся файлов
+  // Вызывается при изменении числа оставшихся файлов.
+  // В лог пишем только когда пройдена очередная веха (20%, 40%, 60%...),
+  // а не на каждый файл — иначе он "летит" и ничего не разобрать.
   window.SetFilesNeeded = function(needed){
     filesNeeded = needed || 0;
     if (filesTotal > 0){
       const done = filesTotal - filesNeeded;
+      const pct = (done / filesTotal) * 100;
       filesCounter.textContent = done + ' / ' + filesTotal;
-      setPercent((done / filesTotal) * 100);
-      if (filesNeeded > 0){
-        addLog('Осталось файлов: <b>' + filesNeeded + '</b>');
-      } else {
-        addLog('Все файлы получены', 'ok');
+      setPercent(pct);
+
+      const milestone = Math.floor(pct / 20) * 20; // 0,20,40,60,80,100
+      if (milestone > lastMilestone){
+        lastMilestone = milestone;
+        if (filesNeeded > 0){
+          addLog('Загружено контента: <b>' + milestone + '%</b>');
+        } else {
+          finishCurrentFile();
+          addLog('Все файлы получены', 'ok');
+        }
       }
     }
   };
