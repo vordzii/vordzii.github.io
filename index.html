@@ -83,17 +83,19 @@
     position:fixed; z-index:2; border-radius:50%;
     filter:blur(60px); opacity:0.55; pointer-events:none;
     mix-blend-mode:screen;
-    animation: drift 10s ease-in-out infinite;
+    animation: drift 9s ease-in-out infinite;
     will-change: transform;
+    backface-visibility:hidden;
+    transform:translateZ(0);
   }
   .blob-a{ width:42vw; height:42vw; background:var(--accent-a); top:-10%; left:-8%; }
-  .blob-b{ width:34vw; height:34vw; background:var(--accent-b); bottom:-12%; right:-10%; animation-delay:-4s; animation-duration:13s; }
-  .blob-c{ width:26vw; height:26vw; background:#59a7ff; top:35%; left:60%; animation-delay:-7s; animation-duration:16s; opacity:0.4; }
+  .blob-b{ width:34vw; height:34vw; background:var(--accent-b); bottom:-12%; right:-10%; animation-delay:-3s; animation-duration:11s; }
+  .blob-c{ width:26vw; height:26vw; background:#59a7ff; top:35%; left:60%; animation-delay:-6s; animation-duration:13s; opacity:0.4; }
   @keyframes drift{
-    0%{ transform:translate(0,0) scale(1); }
-    33%{ transform:translate(8%, 6%) scale(1.15); }
-    66%{ transform:translate(-6%, 4%) scale(0.95); }
-    100%{ transform:translate(0,0) scale(1); }
+    0%{ transform:translate3d(0,0,0) scale(1); }
+    33%{ transform:translate3d(10%, 8%, 0) scale(1.2); }
+    66%{ transform:translate3d(-8%, 6%, 0) scale(0.9); }
+    100%{ transform:translate3d(0,0,0) scale(1); }
   }
 
   /* тонкий шум поверх всего — убирает "пластиковое" ощущение */
@@ -210,12 +212,9 @@
     display:flex; justify-content:space-between;
   }
   .console-body{
-    font-family:var(--mono); font-size:12.5px; line-height:1.65;
-    overflow-y:auto; flex:1; scrollbar-width:thin;
-    scrollbar-color: var(--accent-a-soft) transparent;
+    font-family:var(--mono); font-size:12.5px; line-height:1.7;
+    overflow:hidden; flex:1;
   }
-  .console-body::-webkit-scrollbar{ width:5px; }
-  .console-body::-webkit-scrollbar-thumb{ background:var(--accent-a-soft); border-radius:4px; }
 
   .log-line{
     color:var(--text-lo); opacity:0;
@@ -230,6 +229,16 @@
     color:var(--text-hi);
   }
   .log-line.current .tag{ color:var(--accent-a); }
+  .dot-anim span{
+    animation: dotFade 1.4s ease-in-out infinite;
+    opacity:0.15;
+  }
+  .dot-anim span:nth-child(2){ animation-delay:0.2s; }
+  .dot-anim span:nth-child(3){ animation-delay:0.4s; }
+  @keyframes dotFade{
+    0%, 80%, 100%{ opacity:0.15; }
+    40%{ opacity:1; }
+  }
 
   .cursor{
     display:inline-block; width:7px; height:13px; background:var(--accent-a);
@@ -320,7 +329,7 @@
     LOGO_URL: "logo.png",                          // положи файл рядом со страницей
     BG_URL:   "bg.jpg",                            // положи файл рядом со страницей
     LOGO_LETTERS: "RP",                            // буквы-заглушка, если лого не найдено
-    MAX_LOG_LINES: 60,
+    MAX_LOG_LINES: 6,
     TIPS: [
       'Совет: используй <b>/report</b>, если увидел нарушителя правил.',
       'Совет: команда <b>/help</b> открывает список базовых команд.',
@@ -355,43 +364,40 @@
 
   function addLog(text, kind){
     const line = document.createElement('div');
-    line.className = 'log-line' + (kind === 'ok' ? ' ok' : '');
+    line.className = 'log-line' + (kind === 'ok' ? ' ok' : '') + (kind === 'live' ? ' current' : '');
     line.innerHTML = '<span class="tag">[' + timeNow() + ']</span>' + text;
     consoleBody.appendChild(line);
     while (consoleBody.children.length > CONFIG.MAX_LOG_LINES){
       consoleBody.removeChild(consoleBody.firstChild);
     }
-    consoleBody.scrollTop = consoleBody.scrollHeight;
   }
 
-  /* ---- отдельная "живая" строка для текущего скачиваемого файла ----
-     Вместо того чтобы печатать новую строку на КАЖДЫЙ файл (из-за чего
-     лог "летел" и ничего нельзя было прочитать), мы держим одну строку
-     и просто обновляем её текст. Обновление ещё и троттлится по времени,
-     чтобы не дёргалось на пачках мелких файлов. */
-  let currentLineEl = null;
-  let lastFileUpdate = 0;
-  function updateCurrentFile(fileName){
-    const now = Date.now();
-    if (now - lastFileUpdate < 90) return; // троттлинг
-    lastFileUpdate = now;
-
-    if (!currentLineEl){
-      currentLineEl = document.createElement('div');
-      currentLineEl.className = 'log-line current';
-      consoleBody.appendChild(currentLineEl);
-    }
-    currentLineEl.innerHTML = '<span class="tag">[' + timeNow() + ']</span>Скачивание контента<span class="cursor"></span>';
-    consoleBody.scrollTop = consoleBody.scrollHeight;
+  /* ---- отдельная "живая" строка для скачивания контента ----
+     ВАЖНО: игра может вызывать DownloadingFile / SetStatusChanged
+     ОТДЕЛЬНО ДЛЯ КАЖДОГО аддона мастерской (их бывают сотни) — именно
+     это раньше "рвало" лог и подвешивало анимации фона, так как на
+     каждый вызов мы трогали DOM. Теперь строка создаётся ОДИН РАЗ,
+     дальше просто анимируется точками через CSS (без единой перерисовки).
+  */
+  let downloadLineShown = false;
+  function showDownloadingLine(){
+    if (downloadLineShown) return;
+    downloadLineShown = true;
+    addLog('Скачивание контента из мастерской<span class="dot-anim"><span>.</span><span>.</span><span>.</span></span>', 'live');
   }
-  function finishCurrentFile(){
-    currentLineEl = null; // следующий блок скачивания начнёт новую строку
+  function finishDownloadingLine(){
+    downloadLineShown = false;
   }
 
+  let statusFadeTimer = null;
   function setStatus(text){
+    if (statusFadeTimer) clearTimeout(statusFadeTimer);
     statusText.style.opacity = 0;
-    setTimeout(() => { statusText.textContent = text; statusText.style.opacity = 1; }, 120);
-    addLog(text);
+    statusFadeTimer = setTimeout(() => {
+      statusText.textContent = text;
+      statusText.style.opacity = 1;
+      statusFadeTimer = null;
+    }, 120);
   }
 
   function setPercent(p){
@@ -459,25 +465,32 @@
     }
   };
 
-  // Вызывается на каждый файл, который клиент начинает скачивать.
-  // Файлов может быть сотни — поэтому мы НЕ пишем построчно каждый,
-  // а просто обновляем одну "живую" строку "Скачивание контента…".
+  // Вызывается на каждый файл/аддон мастерской, который клиент качает —
+  // а их могут быть сотни. Поэтому мы не трогаем DOM на каждый вызов,
+  // а просто один раз показываем строку "Скачивание контента из мастерской".
   window.DownloadingFile = function(fileName){
-    updateCurrentFile(fileName);
+    showDownloadingLine();
   };
 
   // Вызывается при смене статуса подключения (Lua запускается, и т.д.)
+  let lastStatusCall = 0;
   window.SetStatusChanged = function(status){
+    const now = Date.now();
+    if (now - lastStatusCall < 100) return; // защита от лавины вызовов (сотни аддонов подряд)
+    lastStatusCall = now;
+
     setStatus(status);
+    showDownloadingLine(); // на случай, если контент грузится через статус, а не DownloadingFile
+
     // если движок ещё не прислал список файлов, просто плавно тянем прогресс к 95%
     if (filesTotal === 0){
-      setPercent(Math.min(95, currentPercent + 12));
+      setPercent(Math.min(95, currentPercent + 4));
     }
   };
 
   // Вызывается при изменении числа оставшихся файлов.
-  // В лог пишем только когда пройдена очередная веха (20%, 40%, 60%...),
-  // а не на каждый файл — иначе он "летит" и ничего не разобрать.
+  // Сам процент и так виден на прогресс-баре сверху — в лог пишем
+  // только момент завершения, чтобы консоль оставалась короткой и чистой.
   window.SetFilesNeeded = function(needed){
     filesNeeded = needed || 0;
     if (filesTotal > 0){
@@ -486,15 +499,10 @@
       filesCounter.textContent = done + ' / ' + filesTotal;
       setPercent(pct);
 
-      const milestone = Math.floor(pct / 20) * 20; // 0,20,40,60,80,100
-      if (milestone > lastMilestone){
-        lastMilestone = milestone;
-        if (filesNeeded > 0){
-          addLog('Загружено контента: <b>' + milestone + '%</b>');
-        } else {
-          finishCurrentFile();
-          addLog('Все файлы получены', 'ok');
-        }
+      if (filesNeeded === 0 && lastMilestone < 100){
+        lastMilestone = 100;
+        finishDownloadingLine();
+        addLog('Контент из мастерской получен', 'ok');
       }
     }
   };
